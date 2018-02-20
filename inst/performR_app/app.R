@@ -10,6 +10,9 @@ log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'),
     last_time <- NA
   }
 
+  if (period == 'second'){
+    period_pos <- 1
+  }
   if (period == 'minute'){
     period_pos <- 1*60
   }else if(period == 'hour'){
@@ -29,7 +32,9 @@ log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'),
     char_num <- sum(nchar(code_file))
 
     stats <- list('lines' = lines_num, 'chars' = char_num, 'date_time' = Sys.time())
-
+    
+    message(last_entry[1])
+    
     write(paste0(unlist(stats), collapse = ','), file = logfile, append=TRUE)
     message('Stats have been added successfully to log file')
     return(TRUE)
@@ -43,6 +48,8 @@ log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'),
 
 
 }
+
+
 
 ui <- fluidPage(
 
@@ -58,7 +65,7 @@ ui <- fluidPage(
            fileInput("file_dir",
                      h6("Select file to monitor")),
 
-        selectizeInput('period', label = h6('Period'), choices = c('minute', 'hour', 'day', 'week'),
+        selectizeInput('period', label = h6('Period'), choices = c('second', 'minute', 'hour', 'day', 'week'),
                        selected = "hour", multiple = FALSE),
          numericInput("period_count", h6("Period Units"), value = 1,
                        min = 1, max = 1000),
@@ -74,22 +81,19 @@ ui <- fluidPage(
 
 
 server <- function(input, output) {
-
+  
+  
+  
   timer_init <- reactiveValues(period_pos = NULL, wait = NULL)
+  files <- reactiveValues(file = NULL, log = NULL)
+  periods <- reactiveValues(period = NULL, period_count = NULL)
   plot_log <- reactiveValues(plotted = FALSE, count = 0, log_plot = ggplot())
-
+  
   observeEvent(input$log > 0, {
-    # timer <- input$period*input$period_count
-    logfile <- input$log_dir$datapath
-    if (file.exists(logfile)){
-      last_entry <- unlist(strsplit(tail(readLines(logfile, warn = FALSE), n = 1), split = ','))
-      last_time <- as.POSIXct(as.numeric(last_entry[length(last_entry)]), origin = "1970-01-01")
-    }else{
-      last_time <- NA
-    }
-
-    if (input$period == 'minute'){
-      period_pos <- 1*60*0.2
+    if (input$period == 'second'){
+      period_pos <- 1
+    }else if (input$period == 'minute'){
+      period_pos <- 1*60
     }else if(input$period == 'hour'){
       period_pos <- 60*60
     }
@@ -98,133 +102,55 @@ server <- function(input, output) {
     }else if(input$period == 'week'){
       period_pos <- 7*24*60*60
     }
-
-    period_pos <- period_pos*input$period_count
-
-    if (is.na(last_time) || (Sys.time() > (last_time + period_pos))){
-      timer_init$period_pos <- period_pos
-      timer_init$wait <- 0
-    }else{
-      timer_init$period_pos <- period_pos
-      timer_init$wait <- (last_time + period_pos) - Sys.time()
-    }
+    timer_init$period_pos <- period_pos*input$period_count
+    timer_init$wait <- isolate(timer_init$period_pos)
     
-    message(timer_init$wait)
-
-  }, ignoreInit = TRUE)
-
-
-  # observeEvent(!is.null(timer_init$wait) && timer_init$wait > 5, {
-  #   Sys.sleep(timer_init$wait)
-  #   timer_init$wait <- 5
-  # }, ignoreInit = TRUE)
-  # 
-  # observeEvent(!is.null(timer_init$wait) && timer_init$wait <= 5, {
-  #   logged <- log_stats(file = input$file_dir$datapath, logfile = input$log_dir$datapath, period = input$period, period_count = input$period_count)
-  #   if (logged){
-  # 
-  #     log_file <- read_csv(input$log_dir$datapath, col_names = FALSE)
-  #     colnames(log_file) <- c('lines', 'chars', 'date')
-  #     plot_log$log_plot <- ggplot(data = log_file, aes(x = date, y = as.numeric(chars))) +
-  #       geom_line(colour = 'red')
-  # 
-  #     #
-  #     plot_log$count <- plot_log$count + 1
-  #     plot_log$plotted <- TRUE
-  # 
-  # 
-  # 
-  # 
-  #     #Sys.sleep(10)
-  # 
-  #     # timer_init$wait <- timer_init$period_pos
-  # 
-  # 
-  # 
-  #   }
-  # }, ignoreInit = TRUE)
+    files$file <- input$file_dir$datapath
+    files$log <- input$log_dir$datapath
+    
+    periods$period <- input$period
+    periods$period_count <- input$period_count
+    
+  })
 
 
-  #progress_plot <- eventReactive(plot_log$count, {
-  #  return(plot_log$log_plot)
-  #}, ignoreInit = TRUE)
 
-  # observeEvent(input$progress$data$x, {
-  #   message("Yes")
-  #   message(input$progress$outputId$x)
-  #   timer_init$wait <- timer_init$period_pos
-  #   plot_log$plotted <- FALSE
-  # }, ignoreInit = TRUE)
   
   log_graph <- observe({
-    invalidateLater(5000)
-    if (!is.null(input$log_dir) && !is.null(input$file_dir) && input$log > 0){
-      if (!is.null(isolate(timer_init$wait)) && isolate(timer_init$wait) == 0){
-        message('hey')
-        log_file <- read_csv(input$log_dir$datapath, col_names = FALSE)
+    
+    if (input$log > 0){
+      invalidateLater(isolate(timer_init$wait)*1000)
+      
+      
+      message("test")
+      message(files$file)
+      message(files$log)
+      message(periods$period)
+      message(periods$period_count)
+      
+      environment(log_stats) <- globalenv()
+      
+      update <- log_stats(file = files$file, logfile = files$log, 
+                period = periods$period, period_count = periods$period_count)
+      
+      if (update){
+        log_file <- read_csv(files$log, col_names = FALSE)
         colnames(log_file) <- c('lines', 'chars', 'date')
-        #message(input$progress$outputId)
         plot_log$log_plot <- ggplot(data = log_file, aes(x = date, y = as.numeric(chars))) +
-          geom_line(colour = 'red')
-      }else{
-        message('sup')
-        plot_log$log_plot <- ggplot()
+            geom_line(colour = 'red')
+        plot_log$plotted <- TRUE
       }
-      
-      
-      # output$progress <- renderPlot({
-      #   message('awe')  
-      #   plot_log$log_plot
-      #   message('awe2')
-      #   })
-      
-      plot_log$plotted = TRUE
-      timer_init$wait = timer_init$period_pos
-      Sys.sleep(5)
-      timer_init$wait = 0
-      # Sys.sleep(timer_init$wait)
-      plot_log$plotted = FALSE
-      message(plot_log$plotted)
     }
+    
+
   })
-  
-  # observeEvent(plot_log$plotted == FALSE, {
-  #   message("check")
-  #   timer_init$wait = 0
-  # }, ignoreInit = TRUE)
+
   
   output$progress <- renderPlot({
-    invalidateLater(10000)
-    return(isolate(plot_log$log_plot))
+    plot_log$log_plot
+    #invalidateLater(5000)
+    #return(isolate(plot_log$log_plot))
   })
-
-
-  # output$progress <- renderPlot({
-  #   assign('timer_init$wait', timer_init$period_pos, envir = parent.frame())
-  #   return(log_graph())
-  #   
-  # })
-  
-  # log_graph <- reactive({
-  #   message('entered')
-  #   if (plot_log$plotted){
-  #     message('hey')
-  #     log_file <- read_csv(input$log_dir$datapath, col_names = FALSE)
-  #     colnames(log_file) <- c('lines', 'chars', 'date')
-  #      #message(input$progress$outputId)
-  #     return(ggplot(data = log_file, aes(x = date, y = as.numeric(chars))) +
-  #       geom_line(colour = 'red'))
-  #   }else{
-  #     return(ggplot())
-  #   }
-  # })
-  # 
-  # 
-  # output$progress <- renderPlot({
-  #   assign('timer_init$wait', timer_init$period_pos, envir = parent.frame())
-  #   return(log_graph())
-  #   
-  # })
 
 }
 
