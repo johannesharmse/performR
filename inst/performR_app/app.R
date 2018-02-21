@@ -98,9 +98,18 @@ server <- function(input, output) {
   periods <- reactiveValues(period = NULL, period_count = NULL)
   plot_log <- reactiveValues(plotted = FALSE, count = 0, log_plot = ggplot())
   
-  hier_count <- length(gregexpr("/", getwd(), fixed = TRUE)[[1]])-1
-  root = paste0(rep(c('..'), times = hier_count), collapse = '/')
-  roots = c(wd = root)
+  sub <- gregexpr("/", dirname(getwd()), fixed = TRUE)[[1]]
+  # sub <- unlist(list(0, sub))
+  hier_count <- (length(sub)):1
+  folders = lapply(1:(length(sub)-1), function(x) 
+    paste0(rep(c('..'), times = hier_count[x]), collapse = '/'))
+  
+  folders_names <- sapply(1:(length(sub)-1), function(x) substr(dirname(getwd()), start = sub[1] + 1, stop = sub[x+1] - 1))
+  
+  names(folders) <- folders_names
+  
+  roots = c(folders, wd = '.')
+  # roots = c(wd = '.')
   
   # roots = c(wd = '..')
   shinyFileChoose(input, 'log_dir', roots = roots)
@@ -124,8 +133,11 @@ server <- function(input, output) {
     timer_init$period_pos <- period_pos*input$period_count
     timer_init$wait <- isolate(timer_init$period_pos)
     
-    files$file <- input$file_dir
-    files$log <- input$log_dir
+    # files$file <- paste0(input$file_dir)
+    # files$log <- paste0(input$log_dir)
+    
+    files$file <- paste0(substr(dirname(getwd()), 1, sub[1] - 1), '/', input$file_dir[[2]], '/', paste0(unlist(input$file_dir[[1]][[1]][2:3]), collapse = '/'))
+    files$log <- paste0(substr(dirname(getwd()), 1, sub[1] - 1), '/', input$log_dir[[2]], '/', paste0(unlist(input$log_dir[[1]][[1]][2:3]), collapse = '/'))
     
     # files$file <- input$file_dir$datapath
     # files$log <- input$log_dir$datapath
