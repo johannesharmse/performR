@@ -54,32 +54,29 @@ log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'),
 
 ui <- fluidPage(
 
-   titlePanel("Testing"),
+   titlePanel("File Progress Tracker"),
 
    sidebarLayout(
       sidebarPanel(
         shinyFilesButton('log_dir', 
                          "Log file", 
-                         h6("Select log file location"), 
+                         "Select log file location", 
                          multiple = FALSE), 
+        br(), 
+        br(), 
+        
+        
         shinyFilesButton('file_dir', 
                          "Track file", 
-                         h6("Select a file to monitor"), 
+                         "Select a file to monitor", 
                          multiple = FALSE), 
-        # fileInput("log_dir",
-        #              h6("Select log file location"),
-        #             accept = c("text/csv",
-        #                        "csv", ".csv")
-        #   ),
-           # fileInput("file_dir",
-           #           h6("Select file to monitor")),
 
         selectizeInput('period', label = h6('Period'), choices = c('second', 'minute', 'hour', 'day', 'week'),
                        selected = "hour", multiple = FALSE),
          numericInput("period_count", h6("Period Units"), value = 1,
-                       min = 1, max = 1000),
+                       min = 1, max = 1000), 
+        checkboxInput('session_track', 'Start new tracking session?'), 
           actionButton("log", "Start Log")
-           #)
       ),
 
       mainPanel(
@@ -92,6 +89,7 @@ ui <- fluidPage(
 server <- function(input, output) {
   
   
+  session_start <- Sys.time()
   
   timer_init <- reactiveValues(period_pos = NULL, wait = NULL)
   files <- reactiveValues(file = NULL, log = NULL)
@@ -133,14 +131,11 @@ server <- function(input, output) {
     timer_init$period_pos <- period_pos*input$period_count
     timer_init$wait <- isolate(timer_init$period_pos)
     
-    # files$file <- paste0(input$file_dir)
-    # files$log <- paste0(input$log_dir)
+    files$file <- paste0(substr(dirname(getwd()), 1, sub[1] - 1), '/', input$file_dir[[2]], '/', 
+                         paste0(unlist(input$file_dir[[1]][[1]][2:3]), collapse = '/'))
     
-    files$file <- paste0(substr(dirname(getwd()), 1, sub[1] - 1), '/', input$file_dir[[2]], '/', paste0(unlist(input$file_dir[[1]][[1]][2:3]), collapse = '/'))
-    files$log <- paste0(substr(dirname(getwd()), 1, sub[1] - 1), '/', input$log_dir[[2]], '/', paste0(unlist(input$log_dir[[1]][[1]][2:3]), collapse = '/'))
-    
-    # files$file <- input$file_dir$datapath
-    # files$log <- input$log_dir$datapath
+    files$log <- paste0(substr(dirname(getwd()), 1, sub[1] - 1), '/', input$log_dir[[2]], '/', 
+                        paste0(unlist(input$log_dir[[1]][[1]][2:3]), collapse = '/'))
     
     periods$period <- input$period
     periods$period_count <- input$period_count
@@ -170,9 +165,18 @@ server <- function(input, output) {
       if (update){
         log_file <- read_csv(files$log, col_names = FALSE)
         colnames(log_file) <- c('lines', 'chars', 'date')
-        plot_log$log_plot <- ggplot(data = log_file, aes(x = date, y = as.numeric(chars))) +
+        
+        if (input$session_track){
+          log_file <- log_file %>% filter(date >= session_start)
+        }
+        
+        if (nrow(log_file) > 0){
+          plot_log$log_plot <- ggplot(data = log_file, aes(x = date, y = as.numeric(chars))) +
             geom_line(colour = 'red')
-        plot_log$plotted <- TRUE
+          plot_log$plotted <- TRUE
+        }
+        
+
       }
     }
     
