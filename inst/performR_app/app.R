@@ -1,4 +1,5 @@
 library(shiny)
+library(shinyFiles)
 library(tidyverse)
 
 log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'), period = 'hour', period_count = 1){
@@ -57,13 +58,21 @@ ui <- fluidPage(
 
    sidebarLayout(
       sidebarPanel(
-        fileInput("log_dir",
-                     h6("Select log file location"),
-                    accept = c("text/csv",
-                               "csv", ".csv")
-           ),
-           fileInput("file_dir",
-                     h6("Select file to monitor")),
+        shinyFilesButton('log_dir', 
+                         "Log file", 
+                         h6("Select log file location"), 
+                         multiple = FALSE), 
+        shinyFilesButton('file_dir', 
+                         "Track file", 
+                         h6("Select a file to monitor"), 
+                         multiple = FALSE), 
+        # fileInput("log_dir",
+        #              h6("Select log file location"),
+        #             accept = c("text/csv",
+        #                        "csv", ".csv")
+        #   ),
+           # fileInput("file_dir",
+           #           h6("Select file to monitor")),
 
         selectizeInput('period', label = h6('Period'), choices = c('second', 'minute', 'hour', 'day', 'week'),
                        selected = "hour", multiple = FALSE),
@@ -89,6 +98,16 @@ server <- function(input, output) {
   periods <- reactiveValues(period = NULL, period_count = NULL)
   plot_log <- reactiveValues(plotted = FALSE, count = 0, log_plot = ggplot())
   
+  hier_count <- length(gregexpr("/", getwd(), fixed = TRUE)[[1]])-1
+  root = paste0(rep(c('..'), times = hier_count), collapse = '/')
+  roots = c(wd = root)
+  
+  # roots = c(wd = '..')
+  shinyFileChoose(input, 'log_dir', roots = roots)
+  shinyFileChoose(input, 'file_dir', roots = roots)
+  
+  
+  
   observeEvent(input$log > 0, {
     if (input$period == 'second'){
       period_pos <- 1
@@ -105,8 +124,11 @@ server <- function(input, output) {
     timer_init$period_pos <- period_pos*input$period_count
     timer_init$wait <- isolate(timer_init$period_pos)
     
-    files$file <- input$file_dir$datapath
-    files$log <- input$log_dir$datapath
+    files$file <- input$file_dir
+    files$log <- input$log_dir
+    
+    # files$file <- input$file_dir$datapath
+    # files$log <- input$log_dir$datapath
     
     periods$period <- input$period
     periods$period_count <- input$period_count
