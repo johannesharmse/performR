@@ -1,8 +1,12 @@
 
+
+# import libraries
 library(shiny)
 library(shinyFiles)
 library(tidyverse)
 
+
+# log writing function
 log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'), period = 'hour', period_count = 1){
 
   if (file.exists(logfile)){
@@ -70,7 +74,7 @@ log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'),
 }
 
 
-
+# ui
 ui <- fluidPage(
 
    titlePanel("File Progress Tracker"),
@@ -104,7 +108,7 @@ ui <- fluidPage(
    )
 )
 
-
+# server
 server <- function(input, output) {
   
   
@@ -211,5 +215,6 @@ server <- function(input, output) {
 
 }
 
+#app
 shinyApp(ui = ui, server = server)
 
