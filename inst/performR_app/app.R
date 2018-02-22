@@ -129,6 +129,7 @@ server <- function(input, output) {
   periods <- reactiveValues(period = NULL, period_count = NULL)
   plot_log <- reactiveValues(plotted = FALSE, count = 0, log_plot = ggplot())
   temp_log <- reactiveValues(log = NULL)
+  data <- reactiveValues(log_file = NULL)
   
   sub <- gregexpr("/", dirname(getwd()), fixed = TRUE)[[1]]
   # sub <- unlist(list(0, sub))
@@ -229,6 +230,8 @@ server <- function(input, output) {
           log_file <- log_file %>% filter(date >= session_start)
         }
         
+        data$log_file <- log_file
+        
         if (nrow(log_file) > 0){
           plot_log$log_plot <- ggplot(data = log_file, aes_string(x = 'date', y = input$y_type)) +
             geom_line(colour = 'red') + 
@@ -244,6 +247,19 @@ server <- function(input, output) {
     
 
   })
+  
+  observeEvent(input$y_type, {
+    
+    if (nrow(data$log_file) > 0){
+      plot_log$log_plot <- ggplot(data = data$log_file, aes_string(x = 'date', y = input$y_type)) +
+        geom_line(colour = 'red') + 
+        scale_y_continuous(limits = c(0, NA)) + 
+        # scale_x_continuous(breaks = log_file$date_name) + 
+        labs(title = paste0('Your progress on ', files$filename), y = input$y_type, x = 'Date')
+      plot_log$plotted <- TRUE
+    }
+      
+  }, ignoreInit = TRUE)
 
   
   output$progress <- renderPlot({
