@@ -103,7 +103,10 @@ ui <- fluidPage(
       ),
 
       mainPanel(
-         plotOutput("progress")
+         plotOutput("progress"), 
+         radioButtons('y_type', label = 'Select the type of data you want to plot', 
+                      choices = c(Characters = 'char', Lines = 'line', Words = 'word'), 
+                      selected = 'word')
       )
    )
 )
@@ -187,14 +190,14 @@ server <- function(input, output) {
       
       if (update){
         log_file <- read_csv(files$log, col_names = FALSE)
-        colnames(log_file) <- c('lines', 'chars', 'words', 'date')
+        colnames(log_file) <- c('line', 'char', 'word', 'date')
         
         if (input$session_track){
           log_file <- log_file %>% filter(date >= session_start)
         }
         
         if (nrow(log_file) > 0){
-          plot_log$log_plot <- ggplot(data = log_file, aes(x = date, y = as.numeric(chars))) +
+          plot_log$log_plot <- ggplot(data = log_file, aes_string(x = 'date', y = input$y_type)) +
             geom_line(colour = 'red')
           plot_log$plotted <- TRUE
         }
