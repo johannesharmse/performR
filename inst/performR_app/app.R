@@ -118,7 +118,7 @@ server <- function(input, output) {
   session_start <- Sys.time()
   
   timer_init <- reactiveValues(period_pos = NULL, wait = NULL)
-  files <- reactiveValues(file = NULL, log = NULL)
+  files <- reactiveValues(file = NULL, log = NULL, filename = NULL)
   periods <- reactiveValues(period = NULL, period_count = NULL)
   plot_log <- reactiveValues(plotted = FALSE, count = 0, log_plot = ggplot())
   
@@ -129,6 +129,7 @@ server <- function(input, output) {
     paste0(rep(c('..'), times = hier_count[x]), collapse = '/'))
   
   folders_names <- sapply(1:(length(sub)-1), function(x) substr(dirname(getwd()), start = sub[1] + 1, stop = sub[x+1] - 1))
+  
   
   names(folders) <- folders_names
   
@@ -159,6 +160,8 @@ server <- function(input, output) {
     
     files$file <- paste0(substr(dirname(getwd()), 1, sub[1] - 1), '/', input$file_dir[[2]], '/', 
                          paste0(unlist(input$file_dir[[1]][[1]][2:3]), collapse = '/'))
+    
+    files$filename <- input$file_dir[[1]][[1]][3]
     
     files$log <- paste0(substr(dirname(getwd()), 1, sub[1] - 1), '/', input$log_dir[[2]], '/', 
                         paste0(unlist(input$log_dir[[1]][[1]][2:3]), collapse = '/'))
@@ -192,13 +195,19 @@ server <- function(input, output) {
         log_file <- read_csv(files$log, col_names = FALSE)
         colnames(log_file) <- c('line', 'char', 'word', 'date')
         
+        log_file <- log_file %>% 
+          mutate(date_name = as.character(as.POSIXct(date, origin = "1970-01-01")))
+        
         if (input$session_track){
           log_file <- log_file %>% filter(date >= session_start)
         }
         
         if (nrow(log_file) > 0){
           plot_log$log_plot <- ggplot(data = log_file, aes_string(x = 'date', y = input$y_type)) +
-            geom_line(colour = 'red')
+            geom_line(colour = 'red') + 
+            scale_y_continuous(limits = c(0, NA)) + 
+            # scale_x_continuous(breaks = log_file$date_name) + 
+            labs(title = paste0('Your progress on ', files$filename), y = input$y_type, x = 'Date')
           plot_log$plotted <- TRUE
         }
         
