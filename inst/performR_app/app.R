@@ -5,12 +5,15 @@ library(tidyverse)
 
 
 # log writing function
-log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'), period = 'hour', period_count = 1, temp = FALSE){
+log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'), period = 'hour', period_count = 1, temp = FALSE, temp_file = NULL){
   
-  if (temp == FALSE){
-    if (file.exists(logfile)){
-      if (nchar(tail(readLines(logfile, warn = FALSE), n = 1)) > 0){
+  # if (temp == FALSE || !is.null(temp_file)){
+    if (file.exists(logfile) || !is.null(temp_file)){
+      if (file.exists(logfile) && nchar(tail(readLines(logfile, warn = FALSE), n = 1)) > 0){
         last_entry <- unlist(strsplit(tail(readLines(logfile, warn = FALSE), n = 1), split = ','))
+        last_time <- as.POSIXct(as.numeric(last_entry[length(last_entry)]), origin = "1970-01-01")
+      }else if(!is.null(temp_file) && nrow(temp_file) > 0){
+        last_entry <- unlist(temp_file[nrow(temp_file), ])
         last_time <- as.POSIXct(as.numeric(last_entry[length(last_entry)]), origin = "1970-01-01")
       }else{
         last_time <- NA
@@ -21,7 +24,7 @@ log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'),
       last_time <- NA
       last_entry <- NA
     }
-  }
+  # }
 
   if (period == 'second'){
     period_pos <- 1
@@ -39,9 +42,8 @@ log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'),
 
   period_pos <- period_pos*period_count
 
-  if (temp || 
-      (is.na(last_time) || 
-      (!is.na(last_time) && (Sys.time() > (last_time + period_pos))))){
+  if (is.na(last_time) || 
+      (!is.na(last_time) && (Sys.time() > (last_time + period_pos)))){
     
     code_file <- readLines(file, warn = FALSE)
     
@@ -70,7 +72,7 @@ log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'),
 
   }else{
     message(paste0(period_count, ' ', period, '(s) has not yet passed since last log (', as.character(last_time), ')'))
-    return(list(FALSE, stats))
+    return(list(FALSE, list()))
   }
 
 
@@ -188,14 +190,20 @@ server <- function(input, output) {
       
       message("test")
       message(files$file)
-      message(files$log)
+      # message(files$log)
       message(periods$period)
       message(periods$period_count)
       
       environment(log_stats) <- globalenv()
       
-      log <- log_stats(file = files$file, logfile = files$log, 
-                period = periods$period, period_count = periods$period_count, temp = !input$save_log)
+      if (!input$save_log){
+        log <- log_stats(file = files$file, logfile = '', 
+                period = periods$period, period_count = periods$period_count, temp = !input$save_log, temp_file = temp_log$log)
+      }else{
+        log <- log_stats(file = files$file, logfile = files$log, 
+                period = periods$period, period_count = periods$period_count, temp = !input$save_log, temp_file = temp_log$log)
+      }
+      
       
       stats <- log[[2]]
       update <- log[[1]]
@@ -205,9 +213,9 @@ server <- function(input, output) {
           if (is.null(temp_log$log)){
             temp_log$log <- data.frame('line' = numeric(0), 'char' = numeric(0), 'word' = numeric(0), 'date' = numeric(0))
           }else{
-            temp_log$log <- rbind(isolate(temp_log$log), data.frame(stats))
+            temp_log$log <- rbind(temp_log$log, data.frame(stats))
           }
-          log_file <- isolate(temp_log$log)
+          log_file <- temp_log$log
         }else{
           log_file <- read_csv(files$log, col_names = FALSE)
         }
