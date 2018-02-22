@@ -1,5 +1,3 @@
-
-
 # import libraries
 library(shiny)
 library(shinyFiles)
@@ -7,20 +5,22 @@ library(tidyverse)
 
 
 # log writing function
-log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'), period = 'hour', period_count = 1){
-
-  if (file.exists(logfile)){
-    if (nchar(tail(readLines(logfile, warn = FALSE), n = 1)) > 0){
-      last_entry <- unlist(strsplit(tail(readLines(logfile, warn = FALSE), n = 1), split = ','))
-      last_time <- as.POSIXct(as.numeric(last_entry[length(last_entry)]), origin = "1970-01-01")
+log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'), period = 'hour', period_count = 1, temp = FALSE){
+  
+  if (temp == FALSE){
+    if (file.exists(logfile)){
+      if (nchar(tail(readLines(logfile, warn = FALSE), n = 1)) > 0){
+        last_entry <- unlist(strsplit(tail(readLines(logfile, warn = FALSE), n = 1), split = ','))
+        last_time <- as.POSIXct(as.numeric(last_entry[length(last_entry)]), origin = "1970-01-01")
+      }else{
+        last_time <- NA
+        last_entry <- NA
+      }
+      
     }else{
       last_time <- NA
       last_entry <- NA
     }
-    
-  }else{
-    last_time <- NA
-    last_entry <- NA
   }
 
   if (period == 'second'){
@@ -39,8 +39,9 @@ log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'),
 
   period_pos <- period_pos*period_count
 
-  if (is.na(last_time) || 
-      (!is.na(last_time) && (Sys.time() > (last_time + period_pos)))){
+  if (temp || 
+      (is.na(last_time) || 
+      (!is.na(last_time) && (Sys.time() > (last_time + period_pos))))){
     
     code_file <- readLines(file, warn = FALSE)
     
@@ -52,22 +53,24 @@ log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'),
 
     stats <- list('lines' = lines_num, 'chars' = char_num, 'words' = words_num, 'date_time' = Sys.time())
     
-    message(last_entry[1])
+    # message(last_entry[1])
     
-    if (file.exists(logfile) == FALSE || 
-        (length(readLines(logfile, warn = FALSE)) == 1 && 
-       nchar(readLines(logfile, warn = FALSE)[1]) == 0)){
-      write(paste0(unlist(stats), collapse = ','), file = logfile, append=FALSE)
-    }else{
-      write(paste0(unlist(stats), collapse = ','), file = logfile, append=TRUE)
-    } 
+    if (temp == FALSE){
+      if (file.exists(logfile) == FALSE || 
+          (length(readLines(logfile, warn = FALSE)) == 1 && 
+         nchar(readLines(logfile, warn = FALSE)[1]) == 0)){
+        write(paste0(unlist(stats), collapse = ','), file = logfile, append=FALSE)
+      }else if(temp == FALSE){
+        write(paste0(unlist(stats), collapse = ','), file = logfile, append=TRUE)
+      } 
+    }
     
     message('Stats have been added successfully to log file')
-    return(TRUE)
+    return(list(TRUE, stats))
 
   }else{
     message(paste0(period_count, ' ', period, '(s) has not yet passed since last log (', as.character(last_time), ')'))
-    return(FALSE)
+    return(list(FALSE, stats))
   }
 
 
@@ -81,12 +84,14 @@ ui <- fluidPage(
 
    sidebarLayout(
       sidebarPanel(
-        shinyFilesButton('log_dir', 
-                         "Log file", 
-                         "Select log file location", 
-                         multiple = FALSE), 
+        checkboxInput('save_log', "Save log data to log file?"), 
+        conditionalPanel("input.save_log", 
+          shinyFilesButton('log_dir', 
+                           "Log file", 
+                           "Select log file location", 
+                           multiple = FALSE)), 
         br(), 
-        br(), 
+        # br(), 
         
         
         shinyFilesButton('file_dir', 
@@ -121,6 +126,7 @@ server <- function(input, output) {
   files <- reactiveValues(file = NULL, log = NULL, filename = NULL)
   periods <- reactiveValues(period = NULL, period_count = NULL)
   plot_log <- reactiveValues(plotted = FALSE, count = 0, log_plot = ggplot())
+  temp_log <- reactiveValues(log = NULL)
   
   sub <- gregexpr("/", dirname(getwd()), fixed = TRUE)[[1]]
   # sub <- unlist(list(0, sub))
@@ -188,11 +194,24 @@ server <- function(input, output) {
       
       environment(log_stats) <- globalenv()
       
-      update <- log_stats(file = files$file, logfile = files$log, 
-                period = periods$period, period_count = periods$period_count)
+      log <- log_stats(file = files$file, logfile = files$log, 
+                period = periods$period, period_count = periods$period_count, temp = !input$save_log)
+      
+      stats <- log[[2]]
+      update <- log[[1]]
       
       if (update){
-        log_file <- read_csv(files$log, col_names = FALSE)
+        if (!input$save_log){
+          if (is.null(temp_log$log)){
+            temp_log$log <- data.frame('line' = numeric(0), 'char' = numeric(0), 'word' = numeric(0), 'date' = numeric(0))
+          }else{
+            temp_log$log <- rbind(isolate(temp_log$log), data.frame(stats))
+          }
+          log_file <- isolate(temp_log$log)
+        }else{
+          log_file <- read_csv(files$log, col_names = FALSE)
+        }
+        
         colnames(log_file) <- c('line', 'char', 'word', 'date')
         
         log_file <- log_file %>% 
