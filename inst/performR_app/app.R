@@ -1,3 +1,4 @@
+
 library(shiny)
 library(shinyFiles)
 library(tidyverse)
@@ -5,10 +6,17 @@ library(tidyverse)
 log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'), period = 'hour', period_count = 1){
 
   if (file.exists(logfile)){
-    last_entry <- unlist(strsplit(tail(readLines(logfile, warn = FALSE), n = 1), split = ','))
-    last_time <- as.POSIXct(as.numeric(last_entry[length(last_entry)]), origin = "1970-01-01")
+    if (nchar(tail(readLines(logfile, warn = FALSE), n = 1)) > 0){
+      last_entry <- unlist(strsplit(tail(readLines(logfile, warn = FALSE), n = 1), split = ','))
+      last_time <- as.POSIXct(as.numeric(last_entry[length(last_entry)]), origin = "1970-01-01")
+    }else{
+      last_time <- NA
+      last_entry <- NA
+    }
+    
   }else{
     last_time <- NA
+    last_entry <- NA
   }
 
   if (period == 'second'){
@@ -27,20 +35,31 @@ log_stats <- function(file = getwd(), logfile = paste0(getwd(), '/logfile.csv'),
 
   period_pos <- period_pos*period_count
 
-  if (is.na(last_time) || (Sys.time() > (last_time + period_pos))){
+  if (is.na(last_time) || 
+      (!is.na(last_time) && (Sys.time() > (last_time + period_pos)))){
+    
     code_file <- readLines(file, warn = FALSE)
+    
     lines_num <- length(code_file)
     char_num <- sum(nchar(code_file))
+    ws <- gregexpr(' ', code_file, fixed = TRUE)
+    words_line <- sapply(1:length(ws), function(x) ifelse(ws[[x]][1] == -1, 0, length(ws[[x]])))
+    words_num <- sum(words_line)
 
-    stats <- list('lines' = lines_num, 'chars' = char_num, 'date_time' = Sys.time())
+    stats <- list('lines' = lines_num, 'chars' = char_num, 'words' = words_num, 'date_time' = Sys.time())
     
     message(last_entry[1])
     
-    write(paste0(unlist(stats), collapse = ','), file = logfile, append=TRUE)
+    if (file.exists(logfile) == FALSE || 
+        (length(readLines(logfile, warn = FALSE)) == 1 && 
+       nchar(readLines(logfile, warn = FALSE)[1]) == 0)){
+      write(paste0(unlist(stats), collapse = ','), file = logfile, append=FALSE)
+    }else{
+      write(paste0(unlist(stats), collapse = ','), file = logfile, append=TRUE)
+    } 
+    
     message('Stats have been added successfully to log file')
     return(TRUE)
-
-    # return(stats)
 
   }else{
     message(paste0(period_count, ' ', period, '(s) has not yet passed since last log (', as.character(last_time), ')'))
@@ -164,7 +183,7 @@ server <- function(input, output) {
       
       if (update){
         log_file <- read_csv(files$log, col_names = FALSE)
-        colnames(log_file) <- c('lines', 'chars', 'date')
+        colnames(log_file) <- c('lines', 'chars', 'words', 'date')
         
         if (input$session_track){
           log_file <- log_file %>% filter(date >= session_start)
